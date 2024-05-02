@@ -1,6 +1,6 @@
-import ballerina/websocket;
 import ballerina/http;
 import ballerina/io;
+import ballerina/websocket;
 
 type Country record {
     string name;
@@ -24,14 +24,14 @@ type Player record {|
 
 // Player information service
 service / on new http:Listener(8080) {
-    final http:Client playerInfoClient = checkpanic new("http://localhost:9090");
-    final http:Client storageService = checkpanic new("http://localhost:9000");
+    final http:Client playerInfoClient = checkpanic new ("http://localhost:9090");
+    final http:Client storageService = checkpanic new ("http://localhost:9000");
 
     isolated resource function get player(int playerId) returns Player|error {
         PlayerInfo info = check self.playerInfoClient->/player(id = playerId);
         ImageUrlRes imageUrl = check self.storageService->/image(id = playerId);
-        var { name, country, id } = info;
-        return { name, country, id, imageUrl: imageUrl.url };
+        var {name, country, id} = info;
+        return {name, country, id, imageUrl: imageUrl.url};
     }
 }
 
@@ -66,6 +66,23 @@ type LiveScoreService1Res record {
     BowlingTeam bowlingTeam;
 };
 
+type PlayerData record {
+    string name;
+    int score;
+    int wickets;
+    int overs;
+};
+
+type TeamData record {
+    string name;
+    PlayerData[] players;
+};
+
+type LiveScoreService2Res record {
+    TeamData battingTeam;
+    TeamData bowlingTeam;
+};
+
 type LiveScore record {|
     string battingTeam;
     string bowlingTeam;
@@ -76,7 +93,7 @@ type LiveScore record {|
 
 service class ScoreService {
     *websocket:Service;
-    final http:Client liveScore1Client = checkpanic new("http://localhost:9091");
+    final http:Client liveScore1Client = checkpanic new ("http://localhost:9091");
     final int gameId;
     function init(int gameId) {
         self.gameId = gameId;
@@ -86,8 +103,7 @@ service class ScoreService {
         io:println(scoreCommand);
         match scoreCommand.command {
             "Next" => {
-                LiveScoreService1Res res = check self.liveScore1Client->/score(id=self.gameId);
-                return self.fromScoreService1(res);
+                return self.getScore();
             }
             "Close" => {
                 // TODO: close the connection
@@ -99,8 +115,32 @@ service class ScoreService {
         }
     }
 
+    private function getScore() returns LiveScore|error {
+        LiveScoreService1Res res = check self.liveScore1Client->/score(id = self.gameId);
+        return self.fromScoreService1(res);
+    }
+
     private function fromScoreService1(LiveScoreService1Res res) returns LiveScore {
-        var { name: battingTeam, score, wickets, overs } = res.battingTeam;
-        return { battingTeam, bowlingTeam: res.bowlingTeam.name, score, wickets, overs };
+        var {name: battingTeam, score} = res.battingTeam;
+        var {name: bowlingTeam, wickets, overs} = res.bowlingTeam;
+        return {battingTeam, bowlingTeam, score, wickets, overs};
+    }
+
+    private function fromScoreService2(LiveScoreService2Res res) returns LiveScore {
+        int score = res.battingTeam.players.reduce(
+            function(int currentScore, PlayerData player) returns int {
+            return currentScore + player.score;
+        }, 0);
+        // FIXME: why below don't work
+        // int score1 = res.battingTeam.players.reduce((int currentScore, PlayerData player) => currentScore + player.score        , 0 );
+        var { overs, wickets } = res.bowlingTeam.players.reduce(function(BowlingTeamStats stats, PlayerData player) returns BowlingTeamStats {
+            return {overs: stats.overs + player.overs, wickets: stats.wickets + player.wickets};
+        }, {overs: 0, wickets: 0});
+        return { battingTeam: res.battingTeam.name, bowlingTeam: res.bowlingTeam.name, score, wickets, overs };
     }
 }
+
+type BowlingTeamStats record {|
+    int overs;
+    int wickets;
+|};

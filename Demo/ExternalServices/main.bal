@@ -62,7 +62,7 @@ type Team2 record {|
         int score;
         int wickets;
         int overs;
-    |} player;
+    |}[] players;
 |};
 
 type Score2 record {|
@@ -72,8 +72,8 @@ type Score2 record {|
 
 isolated function createScore2() returns Score2 {
     return {
-        battingTeam: {name: "batting team", player: {name: "player1", score: 50, wickets: 1, overs: 5}},
-        bowlingTeam: {name: "bowling team", player: {name: "player2", score: 25, wickets: 2, overs: 5}}
+        battingTeam: {name: "batting team", players: [{name: "player1", score: 50, wickets: 1, overs: 5}]},
+        bowlingTeam: {name: "bowling team", players: [{name: "player2", score: 25, wickets: 2, overs: 5}]}
     };
 }
 
