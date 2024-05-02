@@ -6,7 +6,6 @@ type ScoreCommand record {
 };
 
 public function main() returns error? {
-    io:println("foo");
     websocket:Client scoreClient = check new ("ws://localhost:8081/?gameId=0");
     check scoreClient->writeMessage({command: "Next"});
     anydata res = check scoreClient->readMessage();

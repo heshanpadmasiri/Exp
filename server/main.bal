@@ -1,6 +1,7 @@
 import ballerina/http;
-import ballerina/io;
 import ballerina/websocket;
+import ballerina/io;
+import ballerina/lang.runtime;
 
 type Country record {
     string name;
@@ -38,7 +39,6 @@ service / on new http:Listener(8080) {
 // Live score service
 service / on new websocket:Listener(8081) {
     resource function get .(int gameId) returns websocket:Service {
-        io:println("Game ID: ", gameId);
         return new ScoreService(gameId);
     }
 }
@@ -94,20 +94,20 @@ type LiveScore record {|
 service class ScoreService {
     *websocket:Service;
     final http:Client liveScore1Client = checkpanic new ("http://localhost:9091");
+    final http:Client liveScore2Client = checkpanic new ("http://localhost:9092");
     final int gameId;
     function init(int gameId) {
         self.gameId = gameId;
     }
 
     remote function onMessage(websocket:Caller caller, ScoreCommand scoreCommand) returns LiveScore|error? {
-        io:println(scoreCommand);
         match scoreCommand.command {
             "Next" => {
                 return self.getScore();
             }
             "Close" => {
-                // TODO: close the connection
-                return error("Unimplemented");
+                // Cleanup any resources
+                return ();
             }
             _ => {
                 return error("Invalid command");
@@ -116,8 +116,21 @@ service class ScoreService {
     }
 
     private function getScore() returns LiveScore|error {
-        LiveScoreService1Res res = check self.liveScore1Client->/score(id = self.gameId);
-        return self.fromScoreService1(res);
+        // FIXME: why can't this directly capture the client
+        http:Client c1 = self.liveScore1Client;
+        http:Client c2 = self.liveScore2Client;
+        worker w1 returns LiveScore|error {
+            LiveScoreService2Res res = check c1->/score(id = self.gameId);
+            io:println(res);
+            return self.fromScoreService2(res);
+        }
+        worker w2 returns LiveScore|error {
+            LiveScoreService2Res res = check c2->/score(id = self.gameId);
+            io:println(res);
+            runtime:sleep(1000);
+            return self.fromScoreService2(res);
+        }
+        return wait w2 | w1;
     }
 
     private function fromScoreService1(LiveScoreService1Res res) returns LiveScore {
